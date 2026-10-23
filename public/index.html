@@ -19,17 +19,10 @@
     <section class="panel" aria-labelledby="format-title"><div class="section-heading"><h2 id="format-title"><span class="step">02</span> Выберите результат</h2></div><fieldset class="formats"><legend class="sr-only">Формат ячейки</legend><label class="format"><input type="radio" name="format" value="flag" checked><span class="format-body"><span class="format-example">🇩🇪</span><strong>Только флаг</strong><span>Заменить код на эмодзи</span></span></label><label class="format"><input type="radio" name="format" value="flag-code"><span class="format-body"><span class="format-example">🇩🇪 <span>DE</span></span><strong>Флаг и код</strong><span>Эмодзи, пробел, код страны</span></span></label></fieldset><div class="rules"><span>↳</span><p>Пустые ячейки остаются пустыми. <b>AIN → 🏳️</b><br>Неизвестные коды сохраняются без изменений.</p></div></section>
     <section class="panel" aria-labelledby="pdf-settings-title">
       <div class="section-heading"><h2 id="pdf-settings-title"><span class="step">03</span> Настройки PDF</h2></div>
-      <label class="field" for="pdf-font">Шрифт основного текста
-        <select id="pdf-font" aria-describedby="pdf-font-help">
-          <option value="">Как в Excel</option>
-          <option value="Arial">Arial</option>
-          <option value="Calibri">Calibri</option>
-          <option value="Segoe UI">Segoe UI</option>
-          <option value="Times New Roman">Times New Roman</option>
-          <option value="Verdana">Verdana</option>
-        </select>
+      <label class="field" for="pdf-size">Размер основного текста в PDF, пт
+        <input id="pdf-size" type="number" min="6" max="36" step="0.5" placeholder="Как в файле" aria-describedby="pdf-size-help">
       </label>
-      <p id="pdf-font-help" class="pdf-help">Для строк участниц и другого основного текста. Размеры и выделение сохраняются, крупные заголовки остаются в исходном шрифте. Используются шрифты, установленные на вашем устройстве. Можно изменить перед сохранением PDF, без повторного преобразования.</p>
+      <p id="pdf-size-help" class="pdf-help">Пустое поле — как в файле, с текущим масштабом печати. Укажите от 6 до 36 пт для основного текста (строк участниц). Заголовки, шрифт и выделение сохраняются. Можно изменить перед сохранением PDF, без повторного преобразования.</p>
     </section>
     <div class="action-row"><p id="summary">Добавьте файлы, чтобы начать</p><button class="primary" id="convert" disabled>Преобразовать файлы <span>→</span></button></div>
     <section id="results-panel" class="panel" hidden aria-labelledby="results-title"><div class="section-heading"><h2 id="results-title"><span class="step done">✓</span> Готово к скачиванию</h2><button id="download-all" class="secondary">Скачать всё ZIP</button></div><p class="pdf-help">PDF: нажмите «Сохранить PDF», затем выберите «Сохранить как PDF» в окне печати. Экспортируется выбранный лист с эмодзи-флагами.</p><div id="results" aria-live="polite"></div></section>
