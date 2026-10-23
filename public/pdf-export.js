@@ -3,7 +3,7 @@
   'use strict';
   const flagFontURL = new URL('vendor/TwemojiCountryFlags.woff2', document.currentScript?.src || document.baseURI).href;
 
-  function createDocument(workbook, { sheetName, title, skipHeader }, xlsx = XLSX) {
+  function createDocument(workbook, { sheetName, title, skipHeader, visuals }, xlsx = XLSX) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) throw new Error('Выбранный лист не найден.');
     const doc = document.implementation.createHTMLDocument(title);
@@ -11,8 +11,14 @@
     const meta = doc.createElement('meta'); meta.charset = 'utf-8'; doc.head.prepend(meta);
     // Ignore formatting-only cells when finding the printable area.
     const positions = Object.keys(sheet).filter(address => !address.startsWith('!') &&
-      (sheet[address].v != null || sheet[address].f)).map(xlsx.utils.decode_cell);
+      String(xlsx.utils.format_cell(sheet[address]) || '').trim()).map(xlsx.utils.decode_cell);
+    positions.push(...(visuals?.images || []).map(image => ({ r: image.r, c: image.c })));
     if (!positions.length) throw new Error('Выбранный лист пуст: нет данных для PDF.');
+    const rowColumns = new Map();
+    for (const pos of positions) {
+      if (!rowColumns.has(pos.r)) rowColumns.set(pos.r, new Set());
+      rowColumns.get(pos.r).add(pos.c);
+    }
     const range = { s: { r: Infinity, c: Infinity }, e: { r: 0, c: 0 } };
     for (const pos of positions) {
       range.s.r = Math.min(range.s.r, pos.r); range.s.c = Math.min(range.s.c, pos.c);
@@ -25,9 +31,13 @@
       range.e.r = Math.max(range.e.r, merge.e.r); range.e.c = Math.max(range.e.c, merge.e.c);
     }
     const columns = range.e.c - range.s.c + 1;
-    if ((range.e.r - range.s.r + 1) * columns > 250000) {
+    const rowCount = range.e.r - range.s.r + 1;
+    if (rowCount * columns > 250000) {
       throw new Error('Область печати слишком велика. Удалите лишние пустые строки и столбцы или разделите лист.');
     }
+    // Keep interior blank rows: they separate sections in the source document.
+    // The bounds above still exclude the formatting-only tail of the worksheet.
+    const retainedRows = Array.from({ length: rowCount }, (_, index) => range.s.r + index);
     const style = doc.createElement('style');
     style.textContent = `
       @font-face { font-family: 'Print Flags'; src: url(${JSON.stringify(flagFontURL)}) format('woff2'); unicode-range: U+1F1E6-1F1FF; font-display: block; }
@@ -40,16 +50,20 @@
       table { width: 100%; border-collapse: collapse; table-layout: auto; }
       th, td { border: .2mm solid #999; padding: 1.8mm; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: normal; }
       th { background: #edf1ec; font-weight: 600; }
+      .cell-pictures { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+      .cell-pictures img { display: inline-block; max-width: 100%; height: auto; object-fit: contain; vertical-align: middle; }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
       .page-spacer td { height: 8mm; padding: 0; border: 0; background: transparent; }
+      .section-separator td { padding: 0; border: 0; background: transparent; }
       tr { break-inside: avoid; }
       body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     `;
     doc.head.append(style);
     const heading = doc.createElement('h1'); heading.textContent = sheetName; doc.body.append(heading);
     const table = doc.createElement('table');
-    const repeatHeader = skipHeader && !merges.some(m => m.s.r === range.s.r && m.e.r > range.s.r);
+    const firstRow = retainedRows[0];
+    const repeatHeader = skipHeader && !merges.some(m => m.s.r === firstRow && m.e.r > firstRow);
     const head = doc.createElement('thead'), body = doc.createElement('tbody');
     const spacer = () => {
       const row = doc.createElement('tr'); row.className = 'page-spacer'; row.setAttribute('aria-hidden', 'true');
@@ -57,27 +71,70 @@
     };
     head.append(spacer());
     const foot = doc.createElement('tfoot'); foot.append(spacer());
-    const covered = new Set(), starts = new Map();
+    const covered = new Set(), starts = new Map(), imageCells = new Map();
+    for (const image of visuals?.images || []) {
+      // A picture anchored in a merged cell belongs to its visible top-left cell.
+      const merge = merges.find(m => image.r >= m.s.r && image.r <= m.e.r && image.c >= m.s.c && image.c <= m.e.c);
+      const r = merge ? (retainedRows.find(row => row >= merge.s.r && row <= merge.e.r) ?? image.r) : image.r;
+      const key = `${r}:${merge ? merge.s.c : image.c}`;
+      if (!imageCells.has(key)) imageCells.set(key, []);
+      imageCells.get(key).push(image);
+    }
     for (const merge of merges) {
-      starts.set(`${merge.s.r}:${merge.s.c}`, merge);
-      for (let r = merge.s.r; r <= merge.e.r; r++) {
+      const mergedRows = retainedRows.filter(r => r >= merge.s.r && r <= merge.e.r);
+      if (!mergedRows.length) continue;
+      starts.set(`${mergedRows[0]}:${merge.s.c}`, { ...merge, rowSpan: mergedRows.length });
+      for (const r of mergedRows) {
         for (let c = merge.s.c; c <= merge.e.c; c++) {
-          if (r !== merge.s.r || c !== merge.s.c) covered.add(`${r}:${c}`);
+          if (r !== mergedRows[0] || c !== merge.s.c) covered.add(`${r}:${c}`);
         }
       }
     }
-    for (let r = range.s.r; r <= range.e.r; r++) {
+    for (const r of retainedRows) {
       const row = doc.createElement('tr');
-      const isHeader = repeatHeader && r === range.s.r;
+      row.dataset.sourceRow = r + 1;
+      if (visuals?.rows[r]?.height) row.style.height = `${visuals.rows[r].height}pt`;
+      const isHeader = repeatHeader && r === firstRow;
+      const populatedColumns = rowColumns.get(r) || new Set();
+      if (!populatedColumns.size) {
+        row.classList.add('section-separator');
+        row.style.height = `${visuals?.rows[r]?.height || sheet['!rows']?.[r]?.hpt || 15}pt`;
+      }
       for (let c = range.s.c; c <= range.e.c; c++) {
         const key = `${r}:${c}`;
         if (covered.has(key)) continue;
         const td = doc.createElement(isHeader ? 'th' : 'td');
-        const cell = sheet[xlsx.utils.encode_cell({ r, c })];
+        const address = xlsx.utils.encode_cell({ r, c });
+        const cell = sheet[address], appearance = visuals?.cells[address];
+        const css = appearance?.css || visuals?.defaultStyle;
+        if (css) Object.assign(td.style, css);
         // Text nodes retain Unicode emojis, Cyrillic and literal HTML safely.
-        td.textContent = cell ? xlsx.utils.format_cell(cell) : '';
+        const text = cell ? xlsx.utils.format_cell(cell) : '';
+        // Keep short numbers, years and flag codes together while long text wraps.
+        if (String(text).length <= 10 && !String(text).includes('\n')) td.style.whiteSpace = 'nowrap';
+        if (appearance?.runs.length && text === appearance.raw) {
+          for (const run of appearance.runs) {
+            const span = doc.createElement('span'); span.textContent = run.text; Object.assign(span.style, run.css); td.append(span);
+          }
+        } else td.textContent = text;
+        const pictures = imageCells.get(key);
+        if (pictures?.length) {
+          const gallery = doc.createElement('div'); gallery.className = 'cell-pictures';
+          for (const picture of pictures) {
+            const img = doc.createElement('img'); img.src = picture.src; img.alt = picture.alt;
+            if (picture.width > 0) img.style.width = `${picture.width}px`;
+            gallery.append(img);
+          }
+          td.append(gallery);
+        }
         const merge = starts.get(key);
-        if (merge) { td.colSpan = merge.e.c - c + 1; td.rowSpan = merge.e.r - r + 1; }
+        if (merge) { td.colSpan = merge.e.c - c + 1; td.rowSpan = merge.rowSpan; }
+        else if (String(text).length > 10 && populatedColumns.size === 1 && populatedColumns.has(c)) {
+          // Excel lets section labels extend across following blank cells.
+          td.colSpan = range.e.c - c + 1;
+          row.append(td);
+          break;
+        }
         row.append(td);
       }
       (isHeader ? head : body).append(row);
@@ -103,6 +160,11 @@
       const fonts = await frame.contentDocument.fonts.load('12px "Print Flags"', '🇩🇪');
       if (!fonts.length) throw new Error('Не удалось загрузить шрифт флагов. Обновите страницу и повторите.');
       await frame.contentDocument.fonts.ready;
+      await Promise.all([...frame.contentDocument.images].map(image => new Promise((resolve, reject) => {
+        const check = () => image.naturalWidth ? resolve() : reject(new Error('Не удалось отобразить картинку «' + image.alt + '». Сохраните её в исходном Excel в формате PNG или JPEG.'));
+        if (image.complete) check();
+        else { image.addEventListener('load', check, { once: true }); image.addEventListener('error', check, { once: true }); }
+      })));
       frame.contentWindow.addEventListener('afterprint', () => frame.remove(), { once: true });
       return frame;
     } catch (error) { frame.remove(); throw error; }

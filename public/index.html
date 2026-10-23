@@ -9,6 +9,7 @@
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="converter.js"></script>
+  <script defer src="workbook-package.js"></script>
   <script defer src="pdf-export.js"></script>
   <script defer src="app.js"></script>
 </head>
@@ -18,7 +19,7 @@
     <section class="panel" aria-labelledby="format-title"><div class="section-heading"><h2 id="format-title"><span class="step">02</span> Выберите результат</h2></div><fieldset class="formats"><legend class="sr-only">Формат ячейки</legend><label class="format"><input type="radio" name="format" value="flag" checked><span class="format-body"><span class="format-example">🇩🇪</span><strong>Только флаг</strong><span>Заменить код на эмодзи</span></span></label><label class="format"><input type="radio" name="format" value="flag-code"><span class="format-body"><span class="format-example">🇩🇪 <span>DE</span></span><strong>Флаг и код</strong><span>Эмодзи, пробел, код страны</span></span></label></fieldset><div class="rules"><span>↳</span><p>Пустые ячейки остаются пустыми. <b>AIN → 🏳️</b><br>Неизвестные коды сохраняются без изменений.</p></div></section>
     <div class="action-row"><p id="summary">Добавьте файлы, чтобы начать</p><button class="primary" id="convert" disabled>Преобразовать файлы <span>→</span></button></div>
     <section id="results-panel" class="panel" hidden aria-labelledby="results-title"><div class="section-heading"><h2 id="results-title"><span class="step done">✓</span> Готово к скачиванию</h2><button id="download-all" class="secondary">Скачать всё ZIP</button></div><p class="pdf-help">PDF: нажмите «Сохранить PDF», затем выберите «Сохранить как PDF» в окне печати. Экспортируется выбранный лист с эмодзи-флагами.</p><div id="results" aria-live="polite"></div></section>
-    <aside class="footnote"><span aria-hidden="true">⌑</span><p>Ваши таблицы остаются у вас. Обработка и скачивание работают прямо в браузере.<br>В XLSX отображение эмодзи зависит от Excel и ОС. Для PDF используется шрифт флагов.<br>Сложное оформление, макросы и диаграммы могут не сохраниться.</p></aside>
+    <aside class="footnote"><span aria-hidden="true">⌑</span><p>Ваши таблицы остаются у вас. Обработка и скачивание работают прямо в браузере.<br>XLSX/XLSM сохраняют исходное оформление и картинки. В PDF сохраняются пустые строки между разделами.<br>В Excel отображение эмодзи зависит от ОС. Для PDF используется шрифт флагов.</p></aside>
   </main><footer><span>Excel → Flags</span><span>Меньше рутины. Больше смысла.</span></footer>
 </body>
 </html>

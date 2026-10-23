@@ -1,4 +1,4 @@
-/* global XLSX, JSZip, FlagConverter, PdfExport */
+/* global XLSX, JSZip, FlagConverter, PdfExport, WorkbookPackage */
 (async () => {
   const log = [];
   let count = 0;
@@ -84,6 +84,48 @@
     equal(parsedHtml.querySelector('title').textContent, '<title>', 'PDF title escaped');
     const noHead = new DOMParser().parseFromString(PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: false, title: 'Без заголовка' }), 'text/html');
     equal(noHead.querySelector('th'), null, 'PDF no header option');
+    const sourceZip = await JSZip.loadAsync(original);
+    const stylesPath = 'xl/styles.xml';
+    // A real OOXML drawing with image-only row, cell styles and partial rich text.
+    const ns = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+    const relNs = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    sourceZip.file(stylesPath, `<styleSheet xmlns="${ns}"><fonts count="2"><font><sz val="11"/><name val="Arial"/></font><font><b/><i/><u/><sz val="18"/><color rgb="FFFF0000"/><name val="Arial"/></font></fonts><fills count="1"><fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill></fills><borders count="1"><border><bottom style="thin"><color rgb="FF0000FF"/></bottom></border></borders><cellXfs count="2"><xf fontId="0" fillId="0" borderId="0"/><xf fontId="1" fillId="0" borderId="0"><alignment horizontal="center"/></xf></cellXfs></styleSheet>`);
+    sourceZip.file('xl/worksheets/sheet1.xml', `<worksheet xmlns="${ns}" xmlns:r="${relNs}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Header</t></is></c></row><row r="2"><c r="A2" s="1" t="inlineStr"><is><t>DE</t></is></c><c r="B2" t="inlineStr"><is><r><rPr><b/><sz val="16"/></rPr><t>Жирный</t></r><r><rPr><i/></rPr><t> курсив</t></r></is></c></row><row r="3"><c r="A3" s="1"/></row><row r="4" ht="24"><c r="B4" s="1"/></row><row r="5"><c r="A5" t="inlineStr"><is><t>AIN</t></is></c></row></sheetData><drawing r:id="img"/></worksheet>`);
+    sourceZip.file('xl/worksheets/_rels/sheet1.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="img" Type="${relNs}/drawing" Target="../drawings/drawing1.xml"/></Relationships>`);
+    sourceZip.file('xl/drawings/drawing1.xml', `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${relNs}"><xdr:oneCellAnchor><xdr:from><xdr:col>2</xdr:col><xdr:row>3</xdr:row></xdr:from><xdr:ext cx="152400" cy="152400"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr name="Test picture"/></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="pic"/></xdr:blipFill></xdr:pic></xdr:oneCellAnchor></xdr:wsDr>`);
+    sourceZip.file('xl/drawings/_rels/drawing1.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="pic" Type="${relNs}/image" Target="../media/test.png"/></Relationships>`);
+    sourceZip.file('xl/media/test.png', 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', { base64: true });
+    const sourceBytes = await sourceZip.generateAsync({ type: 'uint8array' });
+    const sourceBook = XLSX.read(sourceBytes, { type: 'array', cellStyles: true });
+    const settings = { sheetName: 'Countries', column: 0, skipHeader: true, mode: 'flag-code' };
+    const savedBytes = await WorkbookPackage.write(sourceBytes, sourceBook, settings);
+    const savedZip = await JSZip.loadAsync(savedBytes);
+    for (const [path, file] of Object.entries(sourceZip.files)) {
+      if (file.dir || path === 'xl/worksheets/sheet1.xml') continue;
+      equal(await savedZip.file(path).async('base64'), await file.async('base64'), `XLSX preserves ${path}`);
+    }
+    const savedBook = XLSX.read(savedBytes, { type: 'array' });
+    equal(savedBook.Sheets.Countries.A2.v, '🇩🇪 DE', 'package replaces country');
+    equal(savedBook.Sheets.Countries.A5.v, '🏳️ AIN', 'package replaces AIN');
+    const savedXml = new DOMParser().parseFromString(await savedZip.file('xl/worksheets/sheet1.xml').async('string'), 'application/xml');
+    equal(savedXml.querySelector('c[r="A2"]').getAttribute('s'), '1', 'package keeps style index');
+    const visuals = await WorkbookPackage.visuals(sourceBytes, 'Countries');
+    equal(visuals.cells.A2.css.fontWeight, '700', 'original bold style');
+    equal(visuals.cells.A2.css.fontSize, '18pt', 'original font size');
+    equal(visuals.cells.A2.css.color, '#FF0000', 'original font color');
+    equal(visuals.cells.A2.css.backgroundColor, '#FFFF00', 'original fill');
+    equal(visuals.cells.A2.css.fontStyle, 'italic', 'original italic');
+    equal(visuals.cells.A2.css.textDecoration, 'underline', 'original underline');
+    equal(visuals.images.length, 1, 'drawing picture extracted');
+    equal(visuals.images[0].c, 2, 'picture outside data columns retained');
+    const styledHtml = new DOMParser().parseFromString(PdfExport.createDocument(sourceBook, { sheetName: 'Countries', skipHeader: true, title: 'Styled', visuals }), 'text/html');
+    equal(styledHtml.querySelectorAll('tr[data-source-row]').length, 5, 'PDF keeps interior blank and image-only rows');
+    equal(styledHtml.querySelector('tr[data-source-row="3"]').classList.contains('section-separator'), true, 'blank row acts as section separator');
+    equal(styledHtml.querySelectorAll('img').length, 1, 'PDF includes picture');
+    equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontSize, '18pt', 'PDF applies font size');
+    equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontWeight, '700', 'PDF applies bold');
+    equal(styledHtml.querySelectorAll('tr[data-source-row="2"] span').length, 2, 'PDF rich text runs');
+    equal(styledHtml.querySelector('span').style.fontSize, '16pt', 'PDF rich text size');
     document.getElementById('output').textContent = `PASS ${count} assertions\n${log.join('\n')}`;
     document.title = 'PASS';
   } catch (error) {

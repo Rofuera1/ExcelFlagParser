@@ -1,4 +1,4 @@
-/* global XLSX, JSZip, FlagConverter, PdfExport */
+/* global XLSX, JSZip, FlagConverter, PdfExport, WorkbookPackage */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -125,8 +125,9 @@
   }
   function uniqueName(file, used) {
     const base = file.name.replace(/\.[^.]+$/, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_') + '_flags';
-    let name = `${base}.xlsx`, n = 2;
-    while (used.has(name.toLowerCase())) name = `${base}_${n++}.xlsx`;
+    const extension = /\.xlsm$/i.test(file.name) ? 'xlsm' : 'xlsx';
+    let name = `${base}.${extension}`, n = 2;
+    while (used.has(name.toLowerCase())) name = `${base}_${n++}.${extension}`;
     used.add(name.toLowerCase());
     return name;
   }
@@ -148,9 +149,11 @@
       try {
         // Always start from the original, including when switching output modes.
         const workbook = XLSX.read(item.bytes, { type: 'array', cellStyles: true, cellDates: true });
-        const stats = FlagConverter.transformWorkbook(workbook, { ...item, mode: mode() }, XLSX);
-        const data = XLSX.write(workbook, { type: 'array', bookType: 'xlsx', cellStyles: true, compression: true });
-        const output = { name: uniqueName(item.file, used), blob: new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) };
+        const settings = { sheetName: item.sheetName, column: item.column, skipHeader: item.skipHeader, mode: mode() };
+        const packaged = /\.(xlsx|xlsm)$/i.test(item.file.name);
+        const data = packaged ? await WorkbookPackage.write(item.bytes, workbook, settings) : null;
+        const stats = FlagConverter.transformWorkbook(workbook, settings, XLSX);
+        const output = { name: uniqueName(item.file, used), blob: new Blob([data || XLSX.write(workbook, { type: 'array', bookType: 'xlsx', cellStyles: true, compression: true })], { type: /\.xlsm$/i.test(item.file.name) ? 'application/vnd.ms-excel.sheet.macroEnabled.12' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) };
         outputs.push(output);
         const row = element('div', 'result-row');
         const details = element('div', 'result-details');
@@ -161,17 +164,18 @@
           if (stats.formulas) warnings.push(`Формул пропущено: ${stats.formulas}.`);
           details.append(element('small', 'warning', warnings.join('\n')));
         }
-        const button = element('button', 'secondary', 'Скачать .xlsx');
+        if (!packaged) details.append(element('small', 'warning', 'Для сохранения картинок и оформления сначала сохраните исходный .xls как .xlsx в Excel.'));
+        const button = element('button', 'secondary', /\.xlsm$/i.test(item.file.name) ? 'Скачать .xlsm' : 'Скачать .xlsx');
         button.classList.add('download-xlsx');
         button.addEventListener('click', () => download(output.blob, output.name));
         const pdf = element('button', 'secondary export-pdf', 'Сохранить PDF');
-        const settings = { sheetName: item.sheetName, column: item.column, skipHeader: item.skipHeader, mode: mode() };
         pdf.addEventListener('click', async () => {
           pdf.disabled = true; pdf.textContent = 'Готовим PDF…';
           try {
             const printBook = XLSX.read(item.bytes, { type: 'array', cellStyles: true, cellDates: true });
+            const visuals = packaged ? await WorkbookPackage.visuals(item.bytes, settings.sheetName) : undefined;
             FlagConverter.transformWorkbook(printBook, settings, XLSX);
-            await PdfExport.print(printBook, { ...settings, title: output.name.replace(/\.xlsx$/, '') });
+            await PdfExport.print(printBook, { ...settings, visuals, title: output.name.replace(/\.xls[xm]$/, '') });
           } catch (error) { $('notice').textContent = `Не удалось подготовить PDF: ${error.message}`; }
           finally { pdf.disabled = false; pdf.textContent = 'Сохранить PDF'; }
         });
