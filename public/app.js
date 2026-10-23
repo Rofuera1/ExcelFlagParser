@@ -175,7 +175,7 @@
             const printBook = XLSX.read(item.bytes, { type: 'array', cellStyles: true, cellDates: true });
             const visuals = packaged ? await WorkbookPackage.visuals(item.bytes, settings.sheetName) : undefined;
             FlagConverter.transformWorkbook(printBook, settings, XLSX);
-            await PdfExport.print(printBook, { ...settings, visuals, title: output.name.replace(/\.xls[xm]$/, '') });
+            await PdfExport.print(printBook, { ...settings, visuals, pdfFont: $('pdf-font').value, title: output.name.replace(/\.xls[xm]$/, '') });
           } catch (error) { $('notice').textContent = `Не удалось подготовить PDF: ${error.message}`; }
           finally { pdf.disabled = false; pdf.textContent = 'Сохранить PDF'; }
         });

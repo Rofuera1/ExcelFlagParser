@@ -127,6 +127,10 @@
     equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontWeight, '700', 'PDF applies bold');
     equal(styledHtml.querySelectorAll('tr[data-source-row="2"] span').length, 2, 'PDF rich text runs');
     equal(styledHtml.querySelector('span').style.fontSize, '12.32pt', 'PDF scales rich text size proportionally');
+    const fontHtml = new DOMParser().parseFromString(PdfExport.createDocument(sourceBook, { sheetName: 'Countries', skipHeader: true, title: 'Font', visuals, pdfFont: 'Times New Roman' }), 'text/html');
+    equal(fontHtml.querySelector('tr[data-source-row="2"] td').style.fontFamily.includes('Times New Roman'), false, 'larger original font kept');
+    equal(fontHtml.querySelector('tr[data-source-row="2"] span').style.fontFamily.includes('Times New Roman'), true, 'rich body text uses selected font');
+    equal(fontHtml.querySelector('tr[data-source-row="2"] td').style.fontWeight, '700', 'font choice preserves bold');
     document.getElementById('output').textContent = `PASS ${count} assertions\n${log.join('\n')}`;
     document.title = 'PASS';
   } catch (error) {

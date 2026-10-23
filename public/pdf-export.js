@@ -11,7 +11,7 @@
     if (css.fontSize?.endsWith('pt')) element.style.fontSize = scaledPoints(parseFloat(css.fontSize));
   }
 
-  function createDocument(workbook, { sheetName, title, skipHeader, visuals }, xlsx = XLSX) {
+  function createDocument(workbook, { sheetName, title, skipHeader, visuals, pdfFont }, xlsx = XLSX) {
     const sheet = workbook.Sheets[sheetName];
     if (!sheet) throw new Error('Выбранный лист не найден.');
     const doc = document.implementation.createHTMLDocument(title);
@@ -46,6 +46,17 @@
     // Keep interior blank rows: they separate sections in the source document.
     // The bounds above still exclude the formatting-only tail of the worksheet.
     const retainedRows = Array.from({ length: rowCount }, (_, index) => range.s.r + index);
+    const fontFamily = ['Arial','Calibri','Segoe UI','Times New Roman','Verdana'].includes(pdfFont)
+      ? `"Print Flags", ${JSON.stringify(pdfFont)}, "Segoe UI", Arial, sans-serif` : '';
+    // Find the most common size in populated cells, so larger section headings
+    // keep their font while participant rows (including bold rows) use the choice.
+    const fontSizes = new Map();
+    for (const address of Object.keys(sheet).filter(key => !key.startsWith('!'))) {
+      if (!String(xlsx.utils.format_cell(sheet[address]) || '').trim()) continue;
+      const size = parseFloat(visuals?.cells[address]?.css.fontSize || '');
+      if (size) fontSizes.set(size, (fontSizes.get(size) || 0) + 1);
+    }
+    const baseSize = [...fontSizes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || 11;
     const style = doc.createElement('style');
     style.textContent = `
       @font-face { font-family: 'Print Flags'; src: url(${JSON.stringify(flagFontURL)}) format('woff2'); unicode-range: U+1F1E6-1F1FF; font-display: block; }
@@ -113,13 +124,17 @@
         const cell = sheet[address], appearance = visuals?.cells[address];
         const css = appearance?.css || visuals?.defaultStyle;
         applyPrintStyle(td, css);
+        const useBaseFont = fontFamily && !isHeader && parseFloat(css?.fontSize || String(baseSize)) <= baseSize;
+        if (useBaseFont) td.style.fontFamily = fontFamily;
         // Text nodes retain Unicode emojis, Cyrillic and literal HTML safely.
         const text = cell ? xlsx.utils.format_cell(cell) : '';
         // Keep short numbers, years and flag codes together while long text wraps.
         if (String(text).length <= 10 && !String(text).includes('\n')) td.style.whiteSpace = 'nowrap';
         if (appearance?.runs.length && text === appearance.raw) {
           for (const run of appearance.runs) {
-            const span = doc.createElement('span'); span.textContent = run.text; applyPrintStyle(span, run.css); td.append(span);
+            const span = doc.createElement('span'); span.textContent = run.text; applyPrintStyle(span, run.css);
+            if (useBaseFont) span.style.fontFamily = fontFamily;
+            td.append(span);
           }
         } else td.textContent = text;
         const pictures = imageCells.get(key);

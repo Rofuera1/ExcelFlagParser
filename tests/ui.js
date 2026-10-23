@@ -54,12 +54,15 @@
       assert(second.Sheets.Data.B2.v === 'de', 'unselected sheet retained');
       let printFrame;
       win.PdfExport.print = async (workbook, options) => { printFrame = await win.PdfExport.prepare(workbook, options); };
+      $('pdf-font').value = 'Times New Roman'; change($('pdf-font'));
+      assert(!$('results-panel').hidden, 'font choice needs no reconversion');
       doc.querySelector('.export-pdf').click();
       await waitFor(() => printFrame && !doc.querySelector('.export-pdf').disabled);
       assert(printFrame.contentDocument.body.textContent.includes('🇩🇪 DE'), 'PDF uses emoji with code');
       assert(printFrame.contentDocument.body.textContent.includes('🏳️ AIN'), 'PDF includes white flag');
       assert(!printFrame.contentDocument.querySelector('img, canvas'), 'PDF document contains text rather than images');
       assert(printFrame.contentDocument.fonts.check('12px "Print Flags"', '🇩🇪'), 'print flag font is loaded');
+      assert(printFrame.contentDocument.querySelector('tr[data-source-row="2"] td').style.fontFamily.includes('Times New Roman'), 'selected base font reaches PDF');
       printFrame.remove();
       $('download-all').click();
       await waitFor(() => blobs.length === 3);
