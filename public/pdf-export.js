@@ -46,7 +46,6 @@
       @page { size: A4 portrait; margin: 0 10mm; }
       * { box-sizing: border-box; }
       body { margin: 0; color: #111; font: 10pt 'Print Flags', 'Segoe UI', Arial, sans-serif; }
-      h1 { font-size: 14pt; font-weight: 600; margin: 8mm 0 0; overflow-wrap: anywhere; }
       table { width: 100%; border-collapse: collapse; table-layout: auto; }
       th, td { border: .2mm solid #999; padding: 1.8mm; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: normal; }
       th { background: #edf1ec; font-weight: 600; }
@@ -60,7 +59,6 @@
       body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     `;
     doc.head.append(style);
-    const heading = doc.createElement('h1'); heading.textContent = sheetName; doc.body.append(heading);
     const table = doc.createElement('table');
     const firstRow = retainedRows[0];
     const repeatHeader = skipHeader && !merges.some(m => m.s.r === firstRow && m.e.r > firstRow);
