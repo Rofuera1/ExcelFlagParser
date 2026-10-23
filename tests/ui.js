@@ -15,6 +15,7 @@
     try {
       const win = event.target.contentWindow, doc = win.document;
       const $ = id => doc.getElementById(id);
+      assert(!doc.querySelector('header') && !doc.querySelector('.intro'), 'header and introduction removed');
       const change = el => el.dispatchEvent(new win.Event('change', { bubbles: true }));
       const book = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Name', 'ISO'], ['Alice', 'de'], ['Bob', 'AIN'], ['C', 'ZZ']]), 'Data');
@@ -47,10 +48,19 @@
       const result = XLSX.read(new Uint8Array(await blobs[0].arrayBuffer()), { type: 'array' });
       assert(result.Sheets.Data.B2.v === '🇩🇪 DE', 'download contains converted column');
       assert(result.Sheets.Data.B3.v === '🏳️ AIN', 'download contains AIN');
-      doc.querySelectorAll('.result-row button')[1].click();
+      doc.querySelectorAll('.download-xlsx')[1].click();
       const second = XLSX.read(new Uint8Array(await blobs[1].arrayBuffer()), { type: 'array' });
       assert(second.Sheets.Other.A2.v === '🇯🇵 JP', 'per-file sheet setting');
       assert(second.Sheets.Data.B2.v === 'de', 'unselected sheet retained');
+      let printFrame;
+      win.PdfExport.print = async (workbook, options) => { printFrame = await win.PdfExport.prepare(workbook, options); };
+      doc.querySelector('.export-pdf').click();
+      await waitFor(() => printFrame && !doc.querySelector('.export-pdf').disabled);
+      assert(printFrame.contentDocument.body.textContent.includes('🇩🇪 DE'), 'PDF uses emoji with code');
+      assert(printFrame.contentDocument.body.textContent.includes('🏳️ AIN'), 'PDF includes white flag');
+      assert(!printFrame.contentDocument.querySelector('img, canvas'), 'PDF document contains text rather than images');
+      assert(printFrame.contentDocument.fonts.check('12px "Print Flags"', '🇩🇪'), 'print flag font is loaded');
+      printFrame.remove();
       $('download-all').click();
       await waitFor(() => blobs.length === 3);
       const zip = await win.JSZip.loadAsync(await blobs[2].arrayBuffer());
@@ -61,6 +71,11 @@
       await waitFor(() => doc.querySelectorAll('.result-row').length === 2 && !$('convert').disabled);
       doc.querySelector('.result-row button').click();
       assert(XLSX.read(new Uint8Array(await blobs[3].arrayBuffer()), { type: 'array' }).Sheets.Data.B2.v === '🇩🇪', 'repeat conversion uses original');
+      printFrame = null;
+      doc.querySelector('.export-pdf').click();
+      await waitFor(() => printFrame && !doc.querySelector('.export-pdf').disabled);
+      assert(printFrame.contentDocument.body.textContent.includes('🇩🇪') && !printFrame.contentDocument.body.textContent.includes('🇩🇪 DE'), 'PDF uses flag-only mode after reconversion');
+      printFrame.remove();
       doc.querySelector('.remove').click();
       assert(doc.querySelectorAll('.file-card').length === 1 && $('results-panel').hidden, 'remove clears results');
       event.target.style.width = '375px';

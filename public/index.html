@@ -9,17 +9,16 @@
   <script defer src="vendor/xlsx.full.min.js"></script>
   <script defer src="vendor/jszip.min.js"></script>
   <script defer src="converter.js"></script>
+  <script defer src="pdf-export.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="./"><span class="brand-icon">▦</span> Excel <span class="brand-arrow">→</span> Flags</a><span class="privacy"><span class="dot"></span> Всё на вашем устройстве</span></header>
   <main>
-    <div class="intro"><div class="eyebrow">МАЛЕНЬКИЙ ИНСТРУМЕНТ ДЛЯ БОЛЬШИХ ТАБЛИЦ</div><h1>Коды стран.<br><span>Теперь с флагами.</span></h1><p>Загрузите Excel, выберите столбец — и скачайте таблицу<br class="desktop"> с флагами вместо кодов стран.</p><div class="examples"><span>DE <b>→</b> 🇩🇪</span><span>JP <b>→</b> 🇯🇵</span><span>BR <b>→</b> 🇧🇷</span><span>AIN <b>→</b> 🏳️</span></div></div>
     <section class="panel upload-panel" aria-labelledby="upload-title"><div class="section-heading"><h2 id="upload-title"><span class="step">01</span> Добавьте таблицы</h2><span class="muted">.xlsx · .xls · .xlsm</span></div><label class="dropzone" id="dropzone"><input id="file-input" type="file" multiple accept=".xlsx,.xls,.xlsm"><span class="upload-icon" aria-hidden="true">↥</span><strong>Перетащите Excel-файлы сюда</strong><span>или <span class="text-link">выберите на устройстве</span></span><small>Любое количество файлов · без регистрации</small></label><p id="notice" class="notice" role="status" aria-live="polite"></p><div id="files" class="files"></div></section>
     <section class="panel" aria-labelledby="format-title"><div class="section-heading"><h2 id="format-title"><span class="step">02</span> Выберите результат</h2></div><fieldset class="formats"><legend class="sr-only">Формат ячейки</legend><label class="format"><input type="radio" name="format" value="flag" checked><span class="format-body"><span class="format-example">🇩🇪</span><strong>Только флаг</strong><span>Заменить код на эмодзи</span></span></label><label class="format"><input type="radio" name="format" value="flag-code"><span class="format-body"><span class="format-example">🇩🇪 <span>DE</span></span><strong>Флаг и код</strong><span>Эмодзи, пробел, код страны</span></span></label></fieldset><div class="rules"><span>↳</span><p>Пустые ячейки остаются пустыми. <b>AIN → 🏳️</b><br>Неизвестные коды сохраняются без изменений.</p></div></section>
     <div class="action-row"><p id="summary">Добавьте файлы, чтобы начать</p><button class="primary" id="convert" disabled>Преобразовать файлы <span>→</span></button></div>
-    <section id="results-panel" class="panel" hidden aria-labelledby="results-title"><div class="section-heading"><h2 id="results-title"><span class="step done">✓</span> Готово к скачиванию</h2><button id="download-all" class="secondary">Скачать всё ZIP</button></div><div id="results" aria-live="polite"></div></section>
-    <aside class="footnote"><span aria-hidden="true">⌑</span><p>Ваши таблицы остаются у вас. Обработка и скачивание работают прямо в браузере.<br>Результат — файл .xlsx. Сложное оформление, макросы и диаграммы могут не сохраниться.</p></aside>
+    <section id="results-panel" class="panel" hidden aria-labelledby="results-title"><div class="section-heading"><h2 id="results-title"><span class="step done">✓</span> Готово к скачиванию</h2><button id="download-all" class="secondary">Скачать всё ZIP</button></div><p class="pdf-help">PDF: нажмите «Сохранить PDF», затем выберите «Сохранить как PDF» в окне печати. Экспортируется выбранный лист с эмодзи-флагами.</p><div id="results" aria-live="polite"></div></section>
+    <aside class="footnote"><span aria-hidden="true">⌑</span><p>Ваши таблицы остаются у вас. Обработка и скачивание работают прямо в браузере.<br>В XLSX отображение эмодзи зависит от Excel и ОС. Для PDF используется шрифт флагов.<br>Сложное оформление, макросы и диаграммы могут не сохраниться.</p></aside>
   </main><footer><span>Excel → Flags</span><span>Меньше рутины. Больше смысла.</span></footer>
 </body>
 </html>

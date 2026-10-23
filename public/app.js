@@ -1,4 +1,4 @@
-/* global XLSX, JSZip, FlagConverter */
+/* global XLSX, JSZip, FlagConverter, PdfExport */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -162,8 +162,21 @@
           details.append(element('small', 'warning', warnings.join('\n')));
         }
         const button = element('button', 'secondary', 'Скачать .xlsx');
+        button.classList.add('download-xlsx');
         button.addEventListener('click', () => download(output.blob, output.name));
-        row.append(details, button); $('results').append(row);
+        const pdf = element('button', 'secondary export-pdf', 'Сохранить PDF');
+        const settings = { sheetName: item.sheetName, column: item.column, skipHeader: item.skipHeader, mode: mode() };
+        pdf.addEventListener('click', async () => {
+          pdf.disabled = true; pdf.textContent = 'Готовим PDF…';
+          try {
+            const printBook = XLSX.read(item.bytes, { type: 'array', cellStyles: true, cellDates: true });
+            FlagConverter.transformWorkbook(printBook, settings, XLSX);
+            await PdfExport.print(printBook, { ...settings, title: output.name.replace(/\.xlsx$/, '') });
+          } catch (error) { $('notice').textContent = `Не удалось подготовить PDF: ${error.message}`; }
+          finally { pdf.disabled = false; pdf.textContent = 'Сохранить PDF'; }
+        });
+        const actions = element('div', 'result-actions'); actions.append(button, pdf);
+        row.append(details, actions); $('results').append(row);
       } catch (error) { errors.push(`${item.file.name}: ошибка преобразования. ${error.message}`); }
     }
     $('notice').textContent = errors.join('\n');

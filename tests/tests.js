@@ -1,4 +1,4 @@
-/* global XLSX, JSZip, FlagConverter */
+/* global XLSX, JSZip, FlagConverter, PdfExport */
 (async () => {
   const log = [];
   let count = 0;
@@ -67,6 +67,23 @@
       transformWorkbook(parsed, { sheetName: 'Countries', column: 1, skipHeader: true, mode: 'flag' }, XLSX);
       equal(parsed.Sheets.Countries.B2.v, '🇩🇪', `${type} input`);
     }
+    const pdfBook = XLSX.utils.book_new();
+    const pdfSheet = XLSX.utils.aoa_to_sheet([['Имя', 'Страна'], ['Иван <script>alert(1)</script>', '🇩🇪 DE'], ['Анна', '🏳️ AIN'], ['Пётр', '']]);
+    pdfSheet['!merges'] = [{ s: { r: 4, c: 0 }, e: { r: 4, c: 1 } }];
+    pdfSheet.A5 = { t: 's', v: 'Итог' }; pdfSheet['!ref'] = 'A1:B1048576';
+    XLSX.utils.book_append_sheet(pdfBook, pdfSheet, 'Протокол');
+    const html = PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: true, title: '<title>' });
+    const parsedHtml = new DOMParser().parseFromString(html, 'text/html');
+    equal(parsedHtml.querySelectorAll('tr').length, 5, 'PDF ignores formatted empty tail');
+    equal(parsedHtml.querySelector('thead').textContent, 'ИмяСтрана', 'PDF repeats header');
+    equal(parsedHtml.querySelector('td[colspan]').colSpan, 2, 'PDF merged cell');
+    equal(parsedHtml.querySelector('script'), null, 'PDF cell HTML escaped');
+    equal(parsedHtml.body.textContent.includes('🇩🇪 DE'), true, 'PDF emoji text preserved');
+    equal(parsedHtml.body.textContent.includes('Иван <script>'), true, 'PDF Cyrillic and literal markup');
+    equal(parsedHtml.querySelector('img, canvas'), null, 'PDF no rasterized cells');
+    equal(parsedHtml.querySelector('title').textContent, '<title>', 'PDF title escaped');
+    const noHead = new DOMParser().parseFromString(PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: false, title: 'Без заголовка' }), 'text/html');
+    equal(noHead.querySelector('thead'), null, 'PDF no header option');
     document.getElementById('output').textContent = `PASS ${count} assertions\n${log.join('\n')}`;
     document.title = 'PASS';
   } catch (error) {
