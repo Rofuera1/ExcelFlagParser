@@ -1,0 +1,76 @@
+/* global XLSX */
+(() => {
+  const output = document.getElementById('output');
+  const log = [];
+  let count = 0;
+  const assert = (condition, name) => { if (!condition) throw new Error(name); count++; log.push(`OK ${name}`); };
+  async function waitFor(check) {
+    for (let i = 0; i < 200; i++) { if (check()) return; await new Promise(r => setTimeout(r, 20)); }
+    throw new Error('Timed out waiting for UI');
+  }
+  let started = false;
+  const run = async event => {
+    if (started) return;
+    started = true;
+    try {
+      const win = event.target.contentWindow, doc = win.document;
+      const $ = id => doc.getElementById(id);
+      const change = el => el.dispatchEvent(new win.Event('change', { bubbles: true }));
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['Name', 'ISO'], ['Alice', 'de'], ['Bob', 'AIN'], ['C', 'ZZ']]), 'Data');
+      XLSX.utils.book_append_sheet(book, XLSX.utils.aoa_to_sheet([['ISO'], ['JP']]), 'Other');
+      const bytes = XLSX.write(book, { type: 'array', bookType: 'xlsx' });
+      const transfer = new win.DataTransfer();
+      transfer.items.add(new win.File([bytes], '<country>.xlsx'));
+      transfer.items.add(new win.File([bytes], '<country>.xlsx'));
+      transfer.items.add(new win.File(['bad'], 'broken.xlsx'));
+      $('file-input').files = transfer.files; change($('file-input'));
+      await waitFor(() => doc.querySelectorAll('.file-card').length === 2 && !$('convert').disabled);
+      assert($('notice').textContent.includes('broken.xlsx'), 'bad file isolated');
+      assert(!doc.querySelector('country'), 'filename rendered as text');
+      const selects = doc.querySelectorAll('.file-options select');
+      selects[1].value = '1'; change(selects[1]);
+      selects[2].value = 'Other'; change(selects[2]);
+      assert(doc.querySelector('.preview').textContent.includes('🇩🇪'), 'column preview');
+      const radio = doc.querySelector('input[value="flag-code"]'); radio.checked = true; change(radio);
+      assert(doc.querySelector('.preview').textContent.includes('🇩🇪 DE'), 'mode updates preview');
+      $('convert').click();
+      await waitFor(() => doc.querySelectorAll('.result-row').length === 2 && !$('convert').disabled);
+      assert(!$('results-panel').hidden, 'results visible');
+      assert(doc.querySelector('.warning').textContent.includes('ZZ'), 'unknown code warning');
+      const names = [...doc.querySelectorAll('.result-details strong')].map(el => el.textContent);
+      assert(names[0] !== names[1], 'duplicate names made unique');
+      const blobs = [];
+      win.URL.createObjectURL = blob => { blobs.push(blob); return 'blob:test'; };
+      win.HTMLAnchorElement.prototype.click = function () {};
+      doc.querySelector('.result-row button').click();
+      const result = XLSX.read(new Uint8Array(await blobs[0].arrayBuffer()), { type: 'array' });
+      assert(result.Sheets.Data.B2.v === '🇩🇪 DE', 'download contains converted column');
+      assert(result.Sheets.Data.B3.v === '🏳️ AIN', 'download contains AIN');
+      doc.querySelectorAll('.result-row button')[1].click();
+      const second = XLSX.read(new Uint8Array(await blobs[1].arrayBuffer()), { type: 'array' });
+      assert(second.Sheets.Other.A2.v === '🇯🇵 JP', 'per-file sheet setting');
+      assert(second.Sheets.Data.B2.v === 'de', 'unselected sheet retained');
+      $('download-all').click();
+      await waitFor(() => blobs.length === 3);
+      const zip = await win.JSZip.loadAsync(await blobs[2].arrayBuffer());
+      assert(Object.keys(zip.files).length === 2, 'ZIP download includes both files');
+      const flag = doc.querySelector('input[value="flag"]'); flag.checked = true; change(flag);
+      assert($('results-panel').hidden, 'changed settings clear stale downloads');
+      $('convert').click();
+      await waitFor(() => doc.querySelectorAll('.result-row').length === 2 && !$('convert').disabled);
+      doc.querySelector('.result-row button').click();
+      assert(XLSX.read(new Uint8Array(await blobs[3].arrayBuffer()), { type: 'array' }).Sheets.Data.B2.v === '🇩🇪', 'repeat conversion uses original');
+      doc.querySelector('.remove').click();
+      assert(doc.querySelectorAll('.file-card').length === 1 && $('results-panel').hidden, 'remove clears results');
+      event.target.style.width = '375px';
+      await new Promise(r => setTimeout(r, 30));
+      assert(doc.documentElement.scrollWidth <= doc.documentElement.clientWidth, 'mobile has no horizontal overflow');
+      output.textContent = `PASS ${count} UI assertions\n${log.join('\n')}`;
+      document.title = 'PASS';
+    } catch (error) { output.textContent = `FAIL\n${error.stack}\n${log.join('\n')}`; document.title = 'FAIL'; }
+  };
+  const frame = document.getElementById('app');
+  frame.addEventListener('load', run);
+  if (frame.contentDocument.readyState === 'complete' && frame.contentWindow.FlagConverter) run({ target: frame });
+})();
