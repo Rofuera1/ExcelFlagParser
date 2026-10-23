@@ -31,30 +31,32 @@
     const style = doc.createElement('style');
     style.textContent = `
       @font-face { font-family: 'Print Flags'; src: url(${JSON.stringify(flagFontURL)}) format('woff2'); unicode-range: U+1F1E6-1F1FF; font-display: block; }
-      @page { size: A4 ${columns > 6 ? 'landscape' : 'portrait'}; margin: 10mm; }
+      /* Zero vertical page margins leave no room for browser date/URL labels.
+         Repeated table spacers supply the content insets on every page. */
+      @page { size: A4 portrait; margin: 0 10mm; }
       * { box-sizing: border-box; }
       body { margin: 0; color: #111; font: 10pt 'Print Flags', 'Segoe UI', Arial, sans-serif; }
-      h1 { font-size: 14pt; font-weight: 600; margin: 0 0 5mm; overflow-wrap: anywhere; }
-      table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+      h1 { font-size: 14pt; font-weight: 600; margin: 8mm 0 0; overflow-wrap: anywhere; }
+      table { width: 100%; border-collapse: collapse; table-layout: auto; }
       th, td { border: .2mm solid #999; padding: 1.8mm; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: normal; }
       th { background: #edf1ec; font-weight: 600; }
       thead { display: table-header-group; }
+      tfoot { display: table-footer-group; }
+      .page-spacer td { height: 8mm; padding: 0; border: 0; background: transparent; }
       tr { break-inside: avoid; }
       body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     `;
     doc.head.append(style);
     const heading = doc.createElement('h1'); heading.textContent = sheetName; doc.body.append(heading);
     const table = doc.createElement('table');
-    const colgroup = doc.createElement('colgroup');
-    const widths = [];
-    for (let c = range.s.c; c <= range.e.c; c++) widths.push(sheet['!cols']?.[c]?.wch || 12);
-    const totalWidth = widths.reduce((sum, width) => sum + width, 0);
-    for (const width of widths) {
-      const col = doc.createElement('col'); col.style.width = `${width / totalWidth * 100}%`; colgroup.append(col);
-    }
-    table.append(colgroup);
     const repeatHeader = skipHeader && !merges.some(m => m.s.r === range.s.r && m.e.r > range.s.r);
     const head = doc.createElement('thead'), body = doc.createElement('tbody');
+    const spacer = () => {
+      const row = doc.createElement('tr'); row.className = 'page-spacer'; row.setAttribute('aria-hidden', 'true');
+      const cell = doc.createElement('td'); cell.colSpan = columns; row.append(cell); return row;
+    };
+    head.append(spacer());
+    const foot = doc.createElement('tfoot'); foot.append(spacer());
     const covered = new Set(), starts = new Map();
     for (const merge of merges) {
       starts.set(`${merge.s.r}:${merge.s.c}`, merge);
@@ -80,8 +82,7 @@
       }
       (isHeader ? head : body).append(row);
     }
-    if (repeatHeader) table.append(head);
-    table.append(body); doc.body.append(table);
+    table.append(head, body, foot); doc.body.append(table);
     return '<!doctype html>\n' + doc.documentElement.outerHTML;
   }
 

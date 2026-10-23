@@ -74,16 +74,16 @@
     XLSX.utils.book_append_sheet(pdfBook, pdfSheet, 'Протокол');
     const html = PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: true, title: '<title>' });
     const parsedHtml = new DOMParser().parseFromString(html, 'text/html');
-    equal(parsedHtml.querySelectorAll('tr').length, 5, 'PDF ignores formatted empty tail');
+    equal(parsedHtml.querySelectorAll('tr:not(.page-spacer)').length, 5, 'PDF ignores formatted empty tail');
     equal(parsedHtml.querySelector('thead').textContent, 'ИмяСтрана', 'PDF repeats header');
-    equal(parsedHtml.querySelector('td[colspan]').colSpan, 2, 'PDF merged cell');
+    equal(parsedHtml.querySelector('tbody td[colspan]').colSpan, 2, 'PDF merged cell');
     equal(parsedHtml.querySelector('script'), null, 'PDF cell HTML escaped');
     equal(parsedHtml.body.textContent.includes('🇩🇪 DE'), true, 'PDF emoji text preserved');
     equal(parsedHtml.body.textContent.includes('Иван <script>'), true, 'PDF Cyrillic and literal markup');
     equal(parsedHtml.querySelector('img, canvas'), null, 'PDF no rasterized cells');
     equal(parsedHtml.querySelector('title').textContent, '<title>', 'PDF title escaped');
     const noHead = new DOMParser().parseFromString(PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: false, title: 'Без заголовка' }), 'text/html');
-    equal(noHead.querySelector('thead'), null, 'PDF no header option');
+    equal(noHead.querySelector('th'), null, 'PDF no header option');
     document.getElementById('output').textContent = `PASS ${count} assertions\n${log.join('\n')}`;
     document.title = 'PASS';
   } catch (error) {

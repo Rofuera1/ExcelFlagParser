@@ -181,6 +181,12 @@
     }
     $('notice').textContent = errors.join('\n');
     $('results-panel').hidden = !outputs.length;
+    if (outputs.length) {
+      $('results-panel').scrollIntoView({
+        behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth',
+        block: 'start'
+      });
+    }
     $('download-all').disabled = !outputs.length || !globalThis.JSZip;
     if (!globalThis.JSZip && outputs.length) $('notice').textContent += '\nZIP недоступен. Скачайте результаты по отдельности.';
     busy = false; update();
