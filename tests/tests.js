@@ -75,7 +75,8 @@
     const html = PdfExport.createDocument(pdfBook, { sheetName: 'Протокол', skipHeader: true, title: '<title>' });
     const parsedHtml = new DOMParser().parseFromString(html, 'text/html');
     equal(parsedHtml.querySelectorAll('tr:not(.page-spacer)').length, 5, 'PDF ignores formatted empty tail');
-    equal(parsedHtml.querySelector('thead').textContent, 'ИмяСтрана', 'PDF repeats header');
+    equal(parsedHtml.querySelector('thead').textContent, '', 'PDF does not repeat document heading');
+    equal(parsedHtml.querySelector('tbody tr').textContent, 'ИмяСтрана', 'PDF keeps heading in first body row');
     equal(parsedHtml.querySelector('tbody td[colspan]').colSpan, 2, 'PDF merged cell');
     equal(parsedHtml.querySelector('script'), null, 'PDF cell HTML escaped');
     equal(parsedHtml.body.textContent.includes('🇩🇪 DE'), true, 'PDF emoji text preserved');
@@ -122,10 +123,10 @@
     equal(styledHtml.querySelectorAll('tr[data-source-row]').length, 5, 'PDF keeps interior blank and image-only rows');
     equal(styledHtml.querySelector('tr[data-source-row="3"]').classList.contains('section-separator'), true, 'blank row acts as section separator');
     equal(styledHtml.querySelectorAll('img').length, 1, 'PDF includes picture');
-    equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontSize, '18pt', 'PDF applies font size');
+    equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontSize, '13.86pt', 'PDF scales original font size for compact printing');
     equal(styledHtml.querySelector('tr[data-source-row="2"] td').style.fontWeight, '700', 'PDF applies bold');
     equal(styledHtml.querySelectorAll('tr[data-source-row="2"] span').length, 2, 'PDF rich text runs');
-    equal(styledHtml.querySelector('span').style.fontSize, '16pt', 'PDF rich text size');
+    equal(styledHtml.querySelector('span').style.fontSize, '12.32pt', 'PDF scales rich text size proportionally');
     document.getElementById('output').textContent = `PASS ${count} assertions\n${log.join('\n')}`;
     document.title = 'PASS';
   } catch (error) {

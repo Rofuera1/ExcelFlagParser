@@ -2,6 +2,14 @@
 (() => {
   'use strict';
   const flagFontURL = new URL('vendor/TwemojiCountryFlags.woff2', document.currentScript?.src || document.baseURI).href;
+  // Compact print scale, preserving relative font sizes from the workbook.
+  const printScale = 0.77;
+  const scaledPoints = points => `${Math.round(points * printScale * 100) / 100}pt`;
+  function applyPrintStyle(element, css) {
+    if (!css) return;
+    Object.assign(element.style, css);
+    if (css.fontSize?.endsWith('pt')) element.style.fontSize = scaledPoints(parseFloat(css.fontSize));
+  }
 
   function createDocument(workbook, { sheetName, title, skipHeader, visuals }, xlsx = XLSX) {
     const sheet = workbook.Sheets[sheetName];
@@ -45,15 +53,15 @@
          Repeated table spacers supply the content insets on every page. */
       @page { size: A4 portrait; margin: 0 10mm; }
       * { box-sizing: border-box; }
-      body { margin: 0; color: #111; font: 10pt 'Print Flags', 'Segoe UI', Arial, sans-serif; }
+      body { margin: 0; color: #111; font: 8.5pt/1.05 'Print Flags', 'Segoe UI', Arial, sans-serif; }
       table { width: 100%; border-collapse: collapse; table-layout: auto; }
-      th, td { border: .2mm solid #999; padding: 1.8mm; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: normal; }
+      th, td { border: .2mm solid #999; padding: .25mm .5mm; vertical-align: middle; white-space: pre-wrap; overflow-wrap: anywhere; font-weight: normal; }
       th { background: #edf1ec; font-weight: 600; }
       .cell-pictures { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
       .cell-pictures img { display: inline-block; max-width: 100%; height: auto; object-fit: contain; vertical-align: middle; }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
-      .page-spacer td { height: 8mm; padding: 0; border: 0; background: transparent; }
+      .page-spacer td { height: 5mm; padding: 0; border: 0; background: transparent; }
       .section-separator td { padding: 0; border: 0; background: transparent; }
       tr { break-inside: avoid; }
       body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -61,7 +69,6 @@
     doc.head.append(style);
     const table = doc.createElement('table');
     const firstRow = retainedRows[0];
-    const repeatHeader = skipHeader && !merges.some(m => m.s.r === firstRow && m.e.r > firstRow);
     const head = doc.createElement('thead'), body = doc.createElement('tbody');
     const spacer = () => {
       const row = doc.createElement('tr'); row.className = 'page-spacer'; row.setAttribute('aria-hidden', 'true');
@@ -91,12 +98,12 @@
     for (const r of retainedRows) {
       const row = doc.createElement('tr');
       row.dataset.sourceRow = r + 1;
-      if (visuals?.rows[r]?.height) row.style.height = `${visuals.rows[r].height}pt`;
-      const isHeader = repeatHeader && r === firstRow;
+      if (visuals?.rows[r]?.height) row.style.height = scaledPoints(visuals.rows[r].height);
+      const isHeader = skipHeader && r === firstRow;
       const populatedColumns = rowColumns.get(r) || new Set();
       if (!populatedColumns.size) {
         row.classList.add('section-separator');
-        row.style.height = `${visuals?.rows[r]?.height || sheet['!rows']?.[r]?.hpt || 15}pt`;
+        row.style.height = scaledPoints(visuals?.rows[r]?.height || sheet['!rows']?.[r]?.hpt || 15);
       }
       for (let c = range.s.c; c <= range.e.c; c++) {
         const key = `${r}:${c}`;
@@ -105,14 +112,14 @@
         const address = xlsx.utils.encode_cell({ r, c });
         const cell = sheet[address], appearance = visuals?.cells[address];
         const css = appearance?.css || visuals?.defaultStyle;
-        if (css) Object.assign(td.style, css);
+        applyPrintStyle(td, css);
         // Text nodes retain Unicode emojis, Cyrillic and literal HTML safely.
         const text = cell ? xlsx.utils.format_cell(cell) : '';
         // Keep short numbers, years and flag codes together while long text wraps.
         if (String(text).length <= 10 && !String(text).includes('\n')) td.style.whiteSpace = 'nowrap';
         if (appearance?.runs.length && text === appearance.raw) {
           for (const run of appearance.runs) {
-            const span = doc.createElement('span'); span.textContent = run.text; Object.assign(span.style, run.css); td.append(span);
+            const span = doc.createElement('span'); span.textContent = run.text; applyPrintStyle(span, run.css); td.append(span);
           }
         } else td.textContent = text;
         const pictures = imageCells.get(key);
@@ -120,22 +127,25 @@
           const gallery = doc.createElement('div'); gallery.className = 'cell-pictures';
           for (const picture of pictures) {
             const img = doc.createElement('img'); img.src = picture.src; img.alt = picture.alt;
-            if (picture.width > 0) img.style.width = `${picture.width}px`;
+            if (picture.width > 0) img.style.width = `${picture.width * printScale}px`;
             gallery.append(img);
           }
           td.append(gallery);
         }
         const merge = starts.get(key);
         if (merge) { td.colSpan = merge.e.c - c + 1; td.rowSpan = merge.rowSpan; }
-        else if (String(text).length > 10 && populatedColumns.size === 1 && populatedColumns.has(c)) {
-          // Excel lets section labels extend across following blank cells.
-          td.colSpan = range.e.c - c + 1;
-          row.append(td);
-          break;
+        else if (String(text).length > 10) {
+          // Let section labels extend through adjacent blank cells, stopping
+          // before another value, picture or merged region, as Excel does.
+          let next = c + 1;
+          while (next <= range.e.c && !populatedColumns.has(next) &&
+            !covered.has(`${r}:${next}`) && !starts.has(`${r}:${next}`) && !imageCells.has(`${r}:${next}`)) next++;
+          if (next > c + 1) { td.colSpan = next - c; c = next - 1; }
         }
         row.append(td);
       }
-      (isHeader ? head : body).append(row);
+      // Source headings belong to the document body and print only once.
+      body.append(row);
     }
     table.append(head, body, foot); doc.body.append(table);
     return '<!doctype html>\n' + doc.documentElement.outerHTML;
